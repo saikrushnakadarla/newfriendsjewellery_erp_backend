@@ -1,12 +1,12 @@
 const mysql = require('mysql2');
 
-// const db = mysql.createPool({
-//   host: 'localhost', 
-//   user: 'root', 
-//   password: 'Pavani@123', 
-//   database: 'react_db',
-//   port: 3307,
-// });
+const db = mysql.createPool({
+  host: 'localhost', 
+  user: 'root', 
+  password: 'Pavani@123', 
+  database: 'react_db',
+  port: 3307,
+});
 
 // const db = mysql.createPool({
 //   host: 'localhost',
@@ -16,13 +16,13 @@ const mysql = require('mysql2');
 //   port: 3307,
 // });
 
-const db = mysql.createPool({
-  host: 'localhost', 
-  user: 'root', 
-  password: 'ksk@1005', 
-  database: 'react_db',
-  port: 3306,
-});
+// const db = mysql.createPool({
+//   host: 'localhost', 
+//   user: 'root', 
+//   password: 'ksk@1005', 
+//   database: 'react_db',
+//   port: 3306,
+// });
 
 
 
