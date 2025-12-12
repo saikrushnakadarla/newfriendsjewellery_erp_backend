@@ -1,5 +1,7 @@
 const PaymentModel = require('../models/paymentModel');
 const db = require('../db');
+const fs = require("fs");
+const path = require("path");
 
 exports.addPayment = (req, res) => {
     const {
@@ -17,13 +19,13 @@ exports.addPayment = (req, res) => {
 
     // Prepare data for payment insertion
     const paymentData = [
-        transaction_type, date, modeValue, cheque_number || null, receipt_no, 
+        transaction_type, date, modeValue, cheque_number || null, receipt_no,
         account_name, invoice_number, total_amt, discount_amt || 0, cash_amt || 0, remarks || null, total_wt, paid_wt, bal_wt, category, mobile
     ];
 
     // Call the model method
     PaymentModel.addPaymentAndUpdateRepair(
-        paymentData, 
+        paymentData,
         discount_amt || 0, cash_amt || 0, paid_wt || 0, bal_wt || 0, invoice_number,
         (err, paymentId) => {
             if (err) {
@@ -181,8 +183,12 @@ exports.deletePayment = (req, res) => {
         return res.status(400).json({ error: 'Invalid or missing payment ID.' });
     }
 
-    // Step 1: Get the invoice_number and discount_amt of the payment to be deleted
-    const getPaymentQuery = `SELECT invoice_number, discount_amt FROM payments WHERE id = ?`;
+    // Step 1: Get invoice_number, discount_amt, receipt_no
+    const getPaymentQuery = `
+        SELECT invoice_number, discount_amt, receipt_no 
+        FROM payments 
+        WHERE id = ?
+    `;
 
     db.query(getPaymentQuery, [id], (err, result) => {
         if (err) {
@@ -193,22 +199,34 @@ exports.deletePayment = (req, res) => {
             return res.status(404).json({ error: 'Payment record not found.' });
         }
 
-        const { invoice_number, discount_amt } = result[0];
+        const { invoice_number, discount_amt, receipt_no } = result[0];
 
-        // Step 2: Update repair_details with new receipts_amt and bal_after_receipts
+        // Step 2: Update repair_details (reverse receipts and balance)
         const updateRepairDetailsQuery = `
             UPDATE repair_details 
             SET receipts_amt = receipts_amt - ?, 
                 bal_after_receipts = bal_after_receipts + ? 
-            WHERE invoice_number = ?`;
+            WHERE invoice_number = ?
+        `;
 
-        db.query(updateRepairDetailsQuery, [discount_amt, discount_amt, invoice_number], (err, updateResult) => {
+        db.query(updateRepairDetailsQuery, [discount_amt, discount_amt, invoice_number], (err) => {
             if (err) {
                 console.error('Database error updating repair details:', err.message);
                 return res.status(500).json({ error: 'Failed to update repair details.' });
             }
 
-            // Step 3: Delete the payment record after updating repair_details
+            // Step 3: Delete the receipt PDF file (if exists)
+            if (receipt_no) {
+                const filePath = path.join(__dirname, "../uploads/invoices", `${receipt_no}.pdf`);
+
+                fs.unlink(filePath, (unlinkErr) => {
+                    if (unlinkErr && unlinkErr.code !== "ENOENT") {
+                        console.error("Error deleting receipt PDF:", unlinkErr);
+                    }
+                });
+            }
+
+            // Step 4: Delete the payment record
             const deletePaymentQuery = `DELETE FROM payments WHERE id = ?`;
 
             db.query(deletePaymentQuery, [id], (err, deleteResult) => {
@@ -220,7 +238,9 @@ exports.deletePayment = (req, res) => {
                     return res.status(404).json({ error: 'Payment record not found.' });
                 }
 
-                res.status(200).json({ message: 'Payment record deleted successfully and repair details updated.' });
+                return res.status(200).json({
+                    message: 'Payment deleted, repair details updated, and receipt PDF removed.'
+                });
             });
         });
     });
@@ -400,13 +420,13 @@ exports.addOrderPayment = (req, res) => {
 
     // Prepare data for payment insertion
     const paymentData = [
-        transaction_type, date, modeValue, cheque_number || null, receipt_no, 
+        transaction_type, date, modeValue, cheque_number || null, receipt_no,
         account_name, invoice_number, total_amt, discount_amt || 0, cash_amt || 0, remarks || null, total_wt, paid_wt, bal_wt, category, mobile
     ];
 
     // Call the model method
     PaymentModel.addPaymentAndUpdateOrder(
-        paymentData, 
+        paymentData,
         discount_amt || 0, cash_amt || 0, paid_wt || 0, bal_wt || 0, invoice_number,
         (err, paymentId) => {
             if (err) {
@@ -525,8 +545,12 @@ exports.deleteOrderPayment = (req, res) => {
         return res.status(400).json({ error: 'Invalid or missing payment ID.' });
     }
 
-    // Step 1: Get the invoice_number and discount_amt of the payment to be deleted
-    const getPaymentQuery = `SELECT invoice_number, discount_amt FROM payments WHERE id = ?`;
+    // Step 1: Get the invoice_number, discount_amt, and receipt_no
+    const getPaymentQuery = `
+        SELECT invoice_number, discount_amt, receipt_no 
+        FROM payments 
+        WHERE id = ?
+    `;
 
     db.query(getPaymentQuery, [id], (err, result) => {
         if (err) {
@@ -537,14 +561,15 @@ exports.deleteOrderPayment = (req, res) => {
             return res.status(404).json({ error: 'Payment record not found.' });
         }
 
-        const { invoice_number, discount_amt } = result[0];
+        const { invoice_number, discount_amt, receipt_no } = result[0];
 
-        // Step 2: Update repair_details with new receipts_amt and bal_after_receipts
+        // Step 2: Update repair_details (reverse receipts and balance)
         const updateRepairDetailsQuery = `
             UPDATE repair_details 
             SET receipts_amt = receipts_amt - ?, 
                 bal_after_receipts = bal_after_receipts + ? 
-            WHERE order_number = ?`;
+            WHERE order_number = ?
+        `;
 
         db.query(updateRepairDetailsQuery, [discount_amt, discount_amt, invoice_number], (err, updateResult) => {
             if (err) {
@@ -552,7 +577,18 @@ exports.deleteOrderPayment = (req, res) => {
                 return res.status(500).json({ error: 'Failed to update repair details.' });
             }
 
-            // Step 3: Delete the payment record after updating repair_details
+            // Step 3: Delete the PDF receipt file — do this BEFORE deleting DB record
+            if (receipt_no) {
+                const filePath = path.join(__dirname, "../uploads/invoices", `${receipt_no}.pdf`);
+
+                fs.unlink(filePath, (unlinkErr) => {
+                    if (unlinkErr && unlinkErr.code !== "ENOENT") {
+                        console.error("Error deleting receipt PDF:", unlinkErr);
+                    }
+                });
+            }
+
+            // Step 4: Delete the payment record
             const deletePaymentQuery = `DELETE FROM payments WHERE id = ?`;
 
             db.query(deletePaymentQuery, [id], (err, deleteResult) => {
@@ -564,12 +600,13 @@ exports.deleteOrderPayment = (req, res) => {
                     return res.status(404).json({ error: 'Payment record not found.' });
                 }
 
-                res.status(200).json({ message: 'Payment record deleted successfully and repair details updated.' });
+                res.status(200).json({
+                    message: 'Payment deleted successfully, repair details updated, and receipt PDF removed.'
+                });
             });
         });
     });
 };
-
 
 
 

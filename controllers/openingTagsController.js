@@ -1,6 +1,8 @@
 const openingTagsModel = require('../models/openingTagsModel');
 const moment = require('moment');
 const db = require('../db');
+const fs = require("fs");
+const path = require("path");
 
 const createOpeningTag = (req, res) => {
     const {
@@ -47,7 +49,7 @@ const createOpeningTag = (req, res) => {
         stone_price_per_carat = 0,
         pur_rate_cut = 0,
         pur_Purity = 0,
-        pur_purityPercentage=0,
+        pur_purityPercentage = 0,
         pur_Gross_Weight = 0,
         pur_Stones_Weight = 0,
         pur_deduct_st_Wt = 0,
@@ -227,14 +229,18 @@ const updateOpeningTag = (req, res) => {
 
 const deleteOpeningTag = (req, res) => {
     const { opentag_id } = req.params;
-    const id = parseInt(opentag_id, 10); // Convert to integer
+    const id = parseInt(opentag_id, 10);
 
     if (!id || isNaN(id)) {
         return res.status(400).json({ error: "Invalid ID received" });
     }
 
-    // Fetch record to get `tag_id`, `product_id`, and `Gross_Weight`
-    const getOpeningTagQuery = `SELECT product_id, tag_id, Gross_Weight FROM opening_tags_entry WHERE opentag_id = ?`;
+    // Fetch record — include PCode_BarCode
+    const getOpeningTagQuery = `
+        SELECT product_id, tag_id, Gross_Weight, PCode_BarCode 
+        FROM opening_tags_entry 
+        WHERE opentag_id = ?
+    `;
 
     db.query(getOpeningTagQuery, [id], (err, result) => {
         if (err) {
@@ -245,9 +251,8 @@ const deleteOpeningTag = (req, res) => {
             return res.status(404).json({ message: "Record not found" });
         }
 
-        const { product_id, tag_id, Gross_Weight } = result[0];
+        const { product_id, tag_id, Gross_Weight, PCode_BarCode } = result[0];
 
-        // Ensure `tag_id` is correctly passed as a string (if VARCHAR)
         const formattedTagId = typeof tag_id === "number" ? tag_id.toString() : tag_id;
         const formattedProductId = parseInt(product_id, 10);
 
@@ -255,12 +260,12 @@ const deleteOpeningTag = (req, res) => {
             return res.status(400).json({ error: "Invalid product_id" });
         }
 
-        // Update `updated_values_table`
+        // 1️⃣ Update values table
         const updateValuesQuery = `
-        UPDATE updated_values_table 
-        SET bal_gross_weight = bal_gross_weight + ?, bal_pcs = bal_pcs + 1 
-        WHERE product_id = ? AND tag_id = CAST(? AS CHAR)`;
-
+            UPDATE updated_values_table 
+            SET bal_gross_weight = bal_gross_weight + ?, bal_pcs = bal_pcs + 1 
+            WHERE product_id = ? AND tag_id = CAST(? AS CHAR)
+        `;
 
         db.query(updateValuesQuery, [Gross_Weight, formattedProductId, formattedTagId], (err) => {
             if (err) {
@@ -268,10 +273,20 @@ const deleteOpeningTag = (req, res) => {
                 return res.status(500).json({ error: "Database error updating values table", details: err });
             }
 
+            // 2️⃣ Delete the invoice file (if exists)
+            if (PCode_BarCode) {
+                const filePath = path.join(__dirname, "../uploads/invoices", `${PCode_BarCode}.pdf`);
 
+                fs.unlink(filePath, (unlinkErr) => {
+                    if (unlinkErr && unlinkErr.code !== "ENOENT") {
+                        console.error("Error deleting invoice PDF:", unlinkErr);
+                    }
+                });
+            }
 
-            // Delete from `opening_tags_entry`
+            // 3️⃣ Delete DB record
             const deleteQuery = `DELETE FROM opening_tags_entry WHERE opentag_id = ?`;
+
             db.query(deleteQuery, [id], (err, deleteResult) => {
                 if (err) {
                     console.error("Database error deleting opening tag:", err);
@@ -280,7 +295,6 @@ const deleteOpeningTag = (req, res) => {
                 if (deleteResult.affectedRows === 0) {
                     return res.status(404).json({ message: "No record found to delete" });
                 }
-
 
                 return res.status(200).json({ message: "Opening tag deleted successfully" });
             });

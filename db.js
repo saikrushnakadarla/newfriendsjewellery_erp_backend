@@ -8,13 +8,6 @@ const db = mysql.createPool({
   port: 3307,
 });
 
-// const db = mysql.createPool({
-//   host: 'localhost',
-//   user: 'root',
-//   password: 'sgj@12345',
-//   database: 'react_db',
-//   port: 3307,
-// });
 
 // const db = mysql.createPool({
 //   host: 'localhost', 
@@ -23,8 +16,6 @@ const db = mysql.createPool({
 //   database: 'react_db',
 //   port: 3306,
 // });
-
-
 
 db.getConnection((err, connection) => {
   if (err) {
