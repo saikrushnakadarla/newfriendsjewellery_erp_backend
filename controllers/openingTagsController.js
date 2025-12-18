@@ -188,9 +188,9 @@ const updateOpeningTag = (req, res) => {
         updatedData.Making_Charges = null;  // Set to null or appropriate default value
     }
 
-    // Convert 'added_at' field to MySQL-compatible format if it exists
-    if (updatedData.added_at) {
-        updatedData.added_at = moment(updatedData.added_at).format('YYYY-MM-DD HH:mm:ss');
+    // Convert 'date' field to MySQL-compatible format if it exists
+    if (updatedData.date) {
+        updatedData.date = moment(updatedData.date).format('YYYY-MM-DD HH:mm:ss');
     }
 
     // Step 1: Fetch the current `product_id` and `Gross_Weight` from `opening_tags_entry`
