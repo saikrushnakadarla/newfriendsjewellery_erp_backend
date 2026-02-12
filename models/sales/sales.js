@@ -1,16 +1,34 @@
 const db = require("./../../db");
 
-exports.insert = (repairDetails, oldItems = [], memberSchemes = [], salesNetAmount, callback) => {
+exports.insert = (
+  repairDetails,
+  oldItems = [],
+  memberSchemes = [],
+  salesNetAmount,
+  totalAmount,
+  discountAmt,
+  festivalDiscountAmt,
+  taxableAmount,
+  taxAmount,
+  netAmount,
+  oldItemsAmount,
+  schemeAmount,
+  salesTaxableAmount,
+  callback
+) => {
   if (!Array.isArray(repairDetails) || repairDetails.length === 0) {
     return callback(new Error("Invalid repairDetails array"));
   }
 
-  let currentTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  let currentTime = new Date().toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
   let originalInvoiceNumber = repairDetails[0].invoice_number;
 
   const padNumber = (num, size) => {
-    let s = num + '';
-    while (s.length < size) s = '0' + s;
+    let s = num + "";
+    while (s.length < size) s = "0" + s;
     return s;
   };
 
@@ -33,7 +51,7 @@ exports.insert = (repairDetails, oldItems = [], memberSchemes = [], salesNetAmou
 
   // First, process customer details for all repair items
   const processCustomerDetails = (callback) => {
-    const customerPromises = repairDetails.map(item => {
+    const customerPromises = repairDetails.map((item) => {
       return new Promise((resolve, reject) => {
         if (!item.mobile) {
           // If no mobile number, just proceed with null customer_id
@@ -71,14 +89,18 @@ exports.insert = (repairDetails, oldItems = [], memberSchemes = [], salesNetAmou
               item.aadhar_card || null,
               item.gst_in || null,
               item.pan_card || null,
-              'CUSTOMERS'
+              "CUSTOMERS",
             ];
 
-            db.query(insertCustomerSql, customerParams, (insertErr, insertResult) => {
-              if (insertErr) return reject(insertErr);
-              item.customer_id = insertResult.insertId;
-              resolve(item.customer_id);
-            });
+            db.query(
+              insertCustomerSql,
+              customerParams,
+              (insertErr, insertResult) => {
+                if (insertErr) return reject(insertErr);
+                item.customer_id = insertResult.insertId;
+                resolve(item.customer_id);
+              }
+            );
           }
         });
       });
@@ -86,7 +108,7 @@ exports.insert = (repairDetails, oldItems = [], memberSchemes = [], salesNetAmou
 
     Promise.all(customerPromises)
       .then(() => callback(null))
-      .catch(err => callback(err));
+      .catch((err) => callback(err));
   };
 
   // Process customer details first
@@ -99,7 +121,7 @@ exports.insert = (repairDetails, oldItems = [], memberSchemes = [], salesNetAmou
 
       let maxNumber = currentNumber;
 
-      rows.forEach(row => {
+      rows.forEach((row) => {
         const rowMatch = row.invoice_number.match(invoiceRegex);
         if (rowMatch && rowMatch[1] === prefix) {
           const num = parseInt(rowMatch[2]);
@@ -110,7 +132,9 @@ exports.insert = (repairDetails, oldItems = [], memberSchemes = [], salesNetAmou
       });
 
       let newInvoiceNumber;
-      const exists = rows.some(r => r.invoice_number === originalInvoiceNumber);
+      const exists = rows.some(
+        (r) => r.invoice_number === originalInvoiceNumber
+      );
 
       if (exists) {
         newInvoiceNumber = getNextInvoiceNumber(prefix, maxNumber);
@@ -118,101 +142,57 @@ exports.insert = (repairDetails, oldItems = [], memberSchemes = [], salesNetAmou
         newInvoiceNumber = originalInvoiceNumber;
       }
 
-      // Calculate amounts
-      let totalAmount = 0;
-      let discountAmt = 0;
-      let festivalDiscountAmt = 0;
-      let taxableAmount = 0;
-      let taxAmount = 0;
-      let netAmount = 0;
-
-      repairDetails.forEach((item) => {
-        const pricing = item.pricing;
-
-        // Set receipts and balance fallback values
-        const receiptsAmt = 0.0;
-        const balAfterReceipts = 0.0;
-
-        item.finalReceiptsAmt = item.receipts_amt === "" ? receiptsAmt : parseFloat(item.receipts_amt) || 0.0;
-        item.finalBalAfterReceipts = item.bal_after_receipts === "" ? balAfterReceipts : parseFloat(item.bal_after_receipts) || 0.0;
-
-        // Parse common discounts
-        const itemDiscount = parseFloat(item.disscount) || 0;
-        const itemFestivalDiscount = parseFloat(item.festival_discount) || 0;
-        const itemTax = parseFloat(item.tax_amt) || 0;
-
-        if (pricing === "By Weight") {
-          const stonePrice = parseFloat(item.stone_price) || 0;
-          const makingCharges = parseFloat(item.making_charges) || 0;
-          const rateAmt = parseFloat(item.rate_amt) || 0;
-          const hmCharges = parseFloat(item.hm_charges) || 0;
-
-          const itemTotal = stonePrice + makingCharges + rateAmt + hmCharges;
-          totalAmount += itemTotal;
-          discountAmt += itemDiscount;
-          festivalDiscountAmt += itemFestivalDiscount;
-
-          const totalDiscount = itemDiscount + itemFestivalDiscount;
-          const itemTaxable = itemTotal - totalDiscount;
-
-          taxableAmount += itemTaxable;
-          taxAmount += itemTax;
-          netAmount += itemTaxable + itemTax;
-
-        } else {
-          const pieceCost = parseFloat(item.pieace_cost) || 0;
-          const qty = parseFloat(item.qty) || 0;
-
-          const itemTotal = pieceCost * qty;
-          totalAmount += itemTotal;
-          discountAmt += itemDiscount;
-          festivalDiscountAmt += itemFestivalDiscount;
-
-          const totalDiscount = itemDiscount + itemFestivalDiscount;
-          const itemTaxable = itemTotal - totalDiscount;
-
-          taxableAmount += itemTaxable;
-          taxAmount += itemTax;
-          netAmount += itemTaxable + itemTax;
-        }
-      });
+      // Use amounts directly from frontend instead of recalculating
+      // Validate and parse the amounts
+      const parsedTotalAmount = parseFloat(totalAmount) || 0;
+      const parsedDiscountAmt = parseFloat(discountAmt) || 0;
+      const parsedFestivalDiscountAmt = parseFloat(festivalDiscountAmt) || 0;
+      const parsedTaxableAmount = parseFloat(taxableAmount) || 0;
+      const parsedTaxAmount = parseFloat(taxAmount) || 0;
+      const parsedNetAmount = parseFloat(netAmount) || 0;
+      const parsedOldItemsAmount = parseFloat(oldItemsAmount) || 0;
+      const parsedSchemeAmount = parseFloat(schemeAmount) || 0;
+      const parsedSalesNetAmount = parseFloat(salesNetAmount) || 0;
+      const parsedSalesTaxableAmount = parseFloat(salesTaxableAmount) || 0;
 
       const totalOldAmount = oldItems.reduce((sum, item) => {
         return sum + (parseFloat(item.total_amount) || 0);
       }, 0);
-
-      const parsedSalesNetAmount = parseFloat(salesNetAmount) || 0;
 
       const schemesTotalAmount = memberSchemes.reduce((sum, scheme) => {
         return sum + (parseFloat(scheme.paid_amount) || 0);
       }, 0);
 
       const sanitizeNumeric = (value) => {
-        if (value === null || value === undefined || value === 'NaN') return 0;
+        if (value === null || value === undefined || value === "NaN") return 0;
         const num = parseFloat(value.toString().replace(/[^\d.]/g, ""));
         return isNaN(num) ? 0 : num;
       };
 
       // Check if we should update existing records or insert new ones
       const checkExistingSql = `SELECT id, order_number FROM repair_details WHERE id IN (?)`;
-      const existingIds = repairDetails.map(item => item.id).filter(id => id);
+      const existingIds = repairDetails
+        .map((item) => item.id)
+        .filter((id) => id);
 
       // Get all order numbers from repairDetails
-      const orderNumbers = repairDetails.map(item => item.order_number).filter(Boolean);
-      
+      const orderNumbers = repairDetails
+        .map((item) => item.order_number)
+        .filter(Boolean);
+
       // Function to update repairs table for converted orders
       const updateRepairsTable = (invoiceNumber, callback) => {
         if (orderNumbers.length === 0) {
           return callback(null);
         }
-        
+
         const updateRepairsSql = `
           UPDATE repairs 
           SET invoice = 'Converted', 
               status = 'Delivered to Customer',
               invoice_number = ?
           WHERE repair_no IN (?)`;
-        
+
         db.query(updateRepairsSql, [invoiceNumber, orderNumbers], (err) => {
           if (err) return callback(err);
           callback(null);
@@ -223,11 +203,11 @@ exports.insert = (repairDetails, oldItems = [], memberSchemes = [], salesNetAmou
         db.query(checkExistingSql, [existingIds], (err, existingRows) => {
           if (err) return callback(err);
 
-          const existingIdsSet = new Set(existingRows.map(row => row.id));
+          const existingIdsSet = new Set(existingRows.map((row) => row.id));
           const itemsToInsert = [];
           const itemsToUpdate = [];
 
-          repairDetails.forEach(item => {
+          repairDetails.forEach((item) => {
             if (item.id && item.order_number && existingIdsSet.has(item.id)) {
               // Case 1: ID exists in DB → update and also insert as a new row with a new id
 
@@ -238,13 +218,11 @@ exports.insert = (repairDetails, oldItems = [], memberSchemes = [], salesNetAmou
               // Clone item, remove ID, and set transaction_status for new insert
               const newItem = { ...item };
               delete newItem.id; // Let DB auto-generate ID
-              newItem.transaction_status = 'ConvertedInvoice'; // Set status for the new insert
+              newItem.transaction_status = "ConvertedInvoice"; // Set status for the new insert
               itemsToInsert.push(newItem);
-
             } else if (item.id && existingIdsSet.has(item.id)) {
               // Case 2: Just update
               itemsToUpdate.push(item);
-
             } else {
               // Case 3: Insert (either new item or one with ID not found in DB)
               itemsToInsert.push(item);
@@ -252,15 +230,17 @@ exports.insert = (repairDetails, oldItems = [], memberSchemes = [], salesNetAmou
           });
 
           // Process updates first - use original invoice number for updates
-          const updatePromises = itemsToUpdate.map(item => {
+          const updatePromises = itemsToUpdate.map((item) => {
             return new Promise((resolve, reject) => {
               const cashAmount = parseFloat(item.cash_amount) || 0;
               const cardAmount = parseFloat(item.card_amt) || 0;
               const chqAmount = parseFloat(item.chq_amt) || 0;
               const onlineAmount = parseFloat(item.online_amt) || 0;
 
-              const paidAmt = cashAmount + cardAmount + chqAmount + onlineAmount;
-              const netBillAmount = netAmount - (totalOldAmount + schemesTotalAmount + parsedSalesNetAmount);
+              const paidAmt =
+                cashAmount + cardAmount + chqAmount + onlineAmount;
+              // const netBillAmount = parsedNetAmount - (totalOldAmount + schemesTotalAmount + parsedSalesNetAmount);
+              const netBillAmount = parsedNetAmount;
               const roundedNetBillAmount = Math.round(netBillAmount);
               const balAmt = roundedNetBillAmount - paidAmt;
 
@@ -422,9 +402,9 @@ exports.insert = (repairDetails, oldItems = [], memberSchemes = [], salesNetAmou
                 item.remarks || null,
                 item.sale_status || null,
                 item.invoice_number || null,
-                taxableAmount,
-                taxAmount,
-                netAmount,
+                parsedTaxableAmount,
+                parsedTaxAmount,
+                parsedNetAmount,
                 totalOldAmount,
                 schemesTotalAmount,
                 parsedSalesNetAmount,
@@ -435,7 +415,7 @@ exports.insert = (repairDetails, oldItems = [], memberSchemes = [], salesNetAmou
                 paidAmt,
                 sanitizeNumeric(item.piece_taxable_amt),
                 sanitizeNumeric(item.original_piece_taxable_amt),
-                item.id
+                item.id,
               ];
 
               db.query(updateSql, updateParams, (updateErr) => {
@@ -453,7 +433,8 @@ exports.insert = (repairDetails, oldItems = [], memberSchemes = [], salesNetAmou
             const onlineAmount = parseFloat(item.online_amt) || 0;
 
             const paidAmt = cashAmount + cardAmount + chqAmount + onlineAmount;
-            const netBillAmount = netAmount - (totalOldAmount + schemesTotalAmount + parsedSalesNetAmount);
+            // const netBillAmount = parsedNetAmount - (totalOldAmount + schemesTotalAmount + parsedSalesNetAmount);
+            const netBillAmount = parsedNetAmount;
             const roundedNetBillAmount = Math.round(netBillAmount);
             const balAmt = roundedNetBillAmount - paidAmt;
 
@@ -529,9 +510,9 @@ exports.insert = (repairDetails, oldItems = [], memberSchemes = [], salesNetAmou
               item.hm_charges || null,
               item.remarks || null,
               item.sale_status || null,
-              taxableAmount,
-              taxAmount,
-              netAmount,
+              parsedTaxableAmount,
+              parsedTaxAmount,
+              parsedNetAmount,
               totalOldAmount,
               schemesTotalAmount,
               parsedSalesNetAmount,
@@ -563,14 +544,18 @@ exports.insert = (repairDetails, oldItems = [], memberSchemes = [], salesNetAmou
           Promise.all(updatePromises)
             .then(() => {
               if (insertValues.length > 0) {
-                db.query(insertSql, [insertValues], (insertErr, insertResult) => {
-                  if (insertErr) return callback(insertErr);
-                  // Update repairs table for converted orders
-                  updateRepairsTable(newInvoiceNumber, (err) => {
-                    if (err) return callback(err);
-                    processRelatedTables(newInvoiceNumber, callback);
-                  });
-                });
+                db.query(
+                  insertSql,
+                  [insertValues],
+                  (insertErr, insertResult) => {
+                    if (insertErr) return callback(insertErr);
+                    // Update repairs table for converted orders
+                    updateRepairsTable(newInvoiceNumber, (err) => {
+                      if (err) return callback(err);
+                      processRelatedTables(newInvoiceNumber, callback);
+                    });
+                  }
+                );
               } else {
                 // For updates only, use the original invoice number in related tables
                 // Update repairs table for converted orders
@@ -580,7 +565,7 @@ exports.insert = (repairDetails, oldItems = [], memberSchemes = [], salesNetAmou
                 });
               }
             })
-            .catch(err => callback(err));
+            .catch((err) => callback(err));
         });
       } else {
         // No existing IDs, proceed with insert only - use new invoice number
@@ -591,7 +576,8 @@ exports.insert = (repairDetails, oldItems = [], memberSchemes = [], salesNetAmou
           const onlineAmount = parseFloat(item.online_amt) || 0;
 
           const paidAmt = cashAmount + cardAmount + chqAmount + onlineAmount;
-          const netBillAmount = netAmount - (totalOldAmount + schemesTotalAmount + parsedSalesNetAmount);
+          // const netBillAmount = parsedNetAmount - (totalOldAmount + schemesTotalAmount + parsedSalesNetAmount);
+          const netBillAmount = parsedNetAmount;
           const roundedNetBillAmount = Math.round(netBillAmount);
           const balAmt = roundedNetBillAmount - paidAmt;
 
@@ -667,9 +653,9 @@ exports.insert = (repairDetails, oldItems = [], memberSchemes = [], salesNetAmou
             item.hm_charges || null,
             item.remarks || null,
             item.sale_status || null,
-            taxableAmount,
-            taxAmount,
-            netAmount,
+            parsedTaxableAmount,
+            parsedTaxAmount,
+            parsedNetAmount,
             totalOldAmount,
             schemesTotalAmount,
             parsedSalesNetAmount,
@@ -792,9 +778,13 @@ exports.insert = (repairDetails, oldItems = [], memberSchemes = [], salesNetAmou
               schemes_total_amount = VALUES(schemes_total_amount);
           `;
 
-          db.query(memberSchemesSql, [memberSchemesValues], (memberSchemesErr) => {
-            if (memberSchemesErr) return callback(memberSchemesErr);
-          });
+          db.query(
+            memberSchemesSql,
+            [memberSchemesValues],
+            (memberSchemesErr) => {
+              if (memberSchemesErr) return callback(memberSchemesErr);
+            }
+          );
         }
 
         // Update stock status in the opening_tags_entry table
@@ -817,57 +807,64 @@ exports.insert = (repairDetails, oldItems = [], memberSchemes = [], salesNetAmou
           const aggregatedUpdates = repairDetails.reduce((acc, item) => {
             if (item.transaction_status === "Sales" && item.product_id) {
               if (!acc[item.product_id]) {
-                acc[item.product_id] = { qty: 0, grossWeight: 0, pricing: item.pricing };
+                acc[item.product_id] = {
+                  qty: 0,
+                  grossWeight: 0,
+                  pricing: item.pricing,
+                };
               }
 
               acc[item.product_id].qty += parseFloat(item.qty) || 0;
 
               if (item.pricing === "By Weight") {
-                acc[item.product_id].grossWeight += parseFloat(item.gross_weight) || 0;
+                acc[item.product_id].grossWeight +=
+                  parseFloat(item.gross_weight) || 0;
               }
             }
             return acc;
           }, {});
 
-          const updateQueries = Object.entries(aggregatedUpdates).map(([productId, { qty, grossWeight, pricing }]) => {
-            return new Promise((resolve, reject) => {
-              let updateSaleSql;
-              let saleParams;
+          const updateQueries = Object.entries(aggregatedUpdates).map(
+            ([productId, { qty, grossWeight, pricing }]) => {
+              return new Promise((resolve, reject) => {
+                let updateSaleSql;
+                let saleParams;
 
-              if (pricing === "By Weight") {
-                updateSaleSql = `
+                if (pricing === "By Weight") {
+                  updateSaleSql = `
                   UPDATE product
                   SET 
                     sale_qty = IFNULL(sale_qty, 0) + ?, 
                     sale_weight = IFNULL(sale_weight, 0) + ?
                   WHERE product_id = ?`;
-                saleParams = [qty, grossWeight, productId];
-              } else {
-                updateSaleSql = `
+                  saleParams = [qty, grossWeight, productId];
+                } else {
+                  updateSaleSql = `
                   UPDATE product
                   SET 
                     sale_qty = IFNULL(sale_qty, 0) + ?
                   WHERE product_id = ?`;
-                saleParams = [qty, productId];
-              }
+                  saleParams = [qty, productId];
+                }
 
-              db.query(updateSaleSql, saleParams, (saleErr) => {
-                if (saleErr) return reject(saleErr);
+                db.query(updateSaleSql, saleParams, (saleErr) => {
+                  if (saleErr) return reject(saleErr);
 
-                const updateBalanceSql = `
+                  const updateBalanceSql = `
                   UPDATE product
                   SET 
                     bal_qty = pur_qty - IFNULL(sale_qty, 0), 
                     bal_weight = pur_weight - IFNULL(sale_weight, 0)
                   WHERE product_id = ?`;
 
-                db.query(updateBalanceSql, [productId], (balanceErr) => {
-                  if (balanceErr) return reject(balanceErr);
-                  resolve();
+                  db.query(updateBalanceSql, [productId], (balanceErr) => {
+                    if (balanceErr) return reject(balanceErr);
+                    resolve();
+                  });
                 });
               });
-            });
-          });
+            }
+          );
 
           Promise.all(updateQueries)
             .then(() => callback(null, { invoice_number: invoiceNumber }))
@@ -920,7 +917,7 @@ exports.getAllRepairDetailsByInvoiceNumber = (invoice_number, callback) => {
 };
 
 exports.getRepairDetails = (callback) => {
-  const sql = 'SELECT * FROM repair_details';
+  const sql = "SELECT * FROM repair_details";
   db.query(sql, callback);
 };
 
@@ -1007,6 +1004,3 @@ exports.deleteOldItemsByInvoice = (invoiceNumber, callback) => {
   `;
   db.query(sql, [invoiceNumber], callback);
 };
-
-
-

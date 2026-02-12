@@ -7,7 +7,8 @@ const path = require('path');
 
 exports.saveRepairDetails = (req, res) => {
   try {
-    const { repairDetails, oldItems = [], memberSchemes = [], salesNetAmount } = req.body;
+    const { repairDetails, oldItems = [], memberSchemes = [], salesNetAmount,totalAmount, discountAmt, festivalDiscountAmt, taxableAmount, taxAmount, netAmount, 
+  oldItemsAmount, schemeAmount, salesTaxableAmount } = req.body;
 
 
     if (!Array.isArray(repairDetails) || repairDetails.length === 0) {
@@ -22,7 +23,8 @@ exports.saveRepairDetails = (req, res) => {
     });
 
     // Call the insert function with mapped data
-    repairModel.insert(repairDetails, oldItems, memberSchemes, salesNetAmount, (err) => {
+    repairModel.insert(repairDetails, oldItems, memberSchemes, salesNetAmount,totalAmount, discountAmt, festivalDiscountAmt, taxableAmount, taxAmount, netAmount, 
+  oldItemsAmount, schemeAmount, salesTaxableAmount, (err) => {
       if (err) {
         console.error("Database error:", err);
         return res.status(500).json({ message: "Error saving data to the database" });
